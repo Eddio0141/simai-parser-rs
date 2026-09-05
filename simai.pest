@@ -1,0 +1,103 @@
+// Components
+WHITESPACE = _{ SPACE_SEPARATOR | NEWLINE }
+any_till_end_of_line = _{ !NEWLINE ~ ANY }
+
+float_positive = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+float = @{ "-"? ~ float_positive }
+
+// Header fields
+field_value = @{ any_till_end_of_line* }
+field_start = _{ "&" }
+field_sep = _{ "=" }
+field_end = @{ field_sep ~ field_value }
+
+field_title = @{ field_start ~ "title" ~ field_end }
+field_artist = @{ field_start ~ "artist" ~ field_end }
+field_des = @{ field_start ~ "des" ~ ("_" ~ ASCII_DIGIT+)? ~ field_end }
+field_first = @{ field_start ~ "first" ~ field_sep ~ float }
+field_lv = @{ field_start ~ "lv_" ~ ASCII_DIGIT+ ~ field_end }
+field_wholebpm = @{ field_start ~ "wholebpm" ~ field_sep ~ float_positive }
+field_inote = @{ field_start ~ "inote_" ~ ASCII_DIGIT+ ~ field_sep } // field_end isn't used as that is the map
+
+// Map
+fixed_length = { "#" ~ float_positive }
+break = @{ "b" }
+ex = @{ "x" }
+break_or_ex = @{ (break | ex) | (ex | break) }
+length_divider = { ASCII_DIGIT+ ~ ":" ~ ASCII_DIGIT+ }
+button = @{ '1'..'8' }
+pre_length_divider_bpm = @{ float_positive ~ "#" }
+duration_length_divider = @{ pre_length_divider_bpm? ~ length_divider }
+
+star_tap = @{ "$"{1, 2} } // Normal tap becomes star-shaped tap. Two $ makes it rotate
+tap = @{ button ~ (star_tap | break | ex)* }
+
+hold_mod = @{
+    ("h" ~ break? ~ ex?)
+    | ("h" ~ ex? ~ break?)
+    | (break? ~ "h" ~ ex?)
+    | (ex? ~ "h" ~ break?)
+    | (break? ~ ex? ~ "h")
+    | (ex? ~ break? ~ "h")
+}
+hold_length = @{ "[" ~ (duration_length_divider | fixed_length) ~ "]" }
+hold = @{ button ~ hold_mod ~ hold_length? }
+
+slider_pat = @{ "-" | ">" | "<" | "^" | "v" | "pp" | "qq" | "p" | "q" | "s" | "z" | "w" }
+slider_v_pat = @{ "V" ~ button }
+slider_wait = @{ float_positive ~ "#"{1, 2} }
+slider_length = @{ (length_divider | (float_positive ~ length_divider)) }
+slider_timing = @{ "[" ~ slider_wait? ~ slider_length ~ "]" }
+slider_header = @{ (slider_pat | slider_v_pat) ~ button }
+// TODO: is break meant to always come before final slider_timing
+slider_tapless = @{ (slider_header+ ~ break? ~ slider_timing) | ((slider_header ~ slider_timing)+ ~ break?) }
+slider_no_star = @{ "@" }
+slider_no_tap = @{ "!" | "?" }
+slider = @{ button ~ slider_no_tap? ~ (slider_no_star | break | ex)* ~ slider_tapless }
+
+firework = @{ "f" }
+sensor_group = @{ ("A" | "B" | "D" | "E") ~ '1'..'8' }
+sensor_group_c = @{ "C" ~ ("1" | "2")? }
+sensor = @{ sensor_group | sensor_group_c }
+touch = @{ sensor ~ firework? }
+touch_hold = @{ sensor ~ "h" ~ firework? ~ "[" ~ length_divider ~ "]" }
+
+note = @{
+    hold
+    | slider ~ ("*" ~ slider_tapless+)*
+    | touch_hold
+    | touch
+    | (button ~ button+) // Multinote
+    | tap
+}
+
+beat = @{ "," }
+map_bpm = @{ "(" ~ float_positive ~ ")" }
+map_length_divider = @{ "{" ~ ASCII_DIGIT+ ~ "}" }
+map_length_fixed = @{ "{" ~ fixed_length ~ "}" }
+each = @{ "/" | "`" }
+
+// File
+
+map = {
+    field_inote
+    ~ (
+        map_bpm
+        | map_length_divider
+        | map_length_fixed
+        | beat
+        | (note ~ (each ~ note)*)
+    )*
+    ~ "E"
+}
+
+fields = {
+    field_title
+    | field_artist
+    | field_des
+    | field_first
+    | field_lv
+    | field_wholebpm
+}
+
+file = { SOI ~ fields* ~ map* ~ EOI }
