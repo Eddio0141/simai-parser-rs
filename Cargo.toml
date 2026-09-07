@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-pest = "2.9.0"
-pest_derive = "2.9.0"
+exn = "0.3.1"
+nom = "8.0.0"
+nom-language = "0.1.0"
