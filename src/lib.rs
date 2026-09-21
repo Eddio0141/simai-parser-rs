@@ -119,7 +119,61 @@ pub struct Map {
 
 impl Map {
     fn parse_map_events(first: Option<f64>, events: impl Iterator<Item = parser::Event>) -> Self {
-        todo!()
+        let mut time = first.unwrap_or_default();
+        let mut bpm = 1.;
+        let mut divider = 1.;
+        let mut sep_secs = 1.;
+
+        let mut res = Vec::new();
+
+        for event in events {
+            match event {
+                parser::Event::Tap(tap) => {
+                    res.push(Event {
+                        time,
+                        event_type: EventType::Tap(tap),
+                    });
+                }
+                parser::Event::TapEach((tap, taps)) => {
+                    res.push(Event {
+                        time,
+                        event_type: EventType::Tap(tap),
+                    });
+
+                    // Handle rest of taps
+                    let mut psuedo_time = time;
+                    for tap in taps {
+                        if tap.psuedo_each {
+                            psuedo_time += 0.001;
+                        }
+
+                        res.push(Event {
+                            time: psuedo_time,
+                            event_type: EventType::Tap(Tap {
+                                position: tap.position,
+                                break_: false,
+                                ex: false,
+                                star_shaped: None,
+                            }),
+                        });
+                    }
+                }
+                parser::Event::Hold((hold, duration)) => {}
+                parser::Event::Slide(slide_event) => todo!(),
+                parser::Event::Touch(touch) => todo!(),
+                parser::Event::TouchHold(_) => todo!(),
+                parser::Event::Sep => time += sep_secs,
+                parser::Event::Bpm(value) => bpm = value,
+                // TODO: does this change BPM?
+                parser::Event::ExplicitDuration(value) => sep_secs = value,
+                parser::Event::LengthDivider(value) => {
+                    sep_secs = 240. / bpm / divider;
+                    divider = value;
+                }
+            }
+        }
+
+        Map { events: res }
     }
 }
 

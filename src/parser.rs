@@ -242,14 +242,14 @@ struct SlideData {
 }
 
 #[derive(Clone)]
-struct SlideTrackData {
+pub struct SlideTrackData {
     track: SlideTrack,
     length: EventDuration,
     break_slide: bool,
 }
 
 #[derive(Clone)]
-struct SlideEvent {
+pub struct SlideEvent {
     start: Button,
     slide: SlideData,
     break_note: bool,
@@ -257,9 +257,9 @@ struct SlideEvent {
 }
 
 #[derive(Clone)]
-struct TapEachData {
-    psuedo_each: bool,
-    position: Button,
+pub struct TapEachData {
+    pub psuedo_each: bool,
+    pub position: Button,
 }
 
 #[derive(Clone)]
@@ -273,11 +273,11 @@ pub enum Event {
     Sep,
     Bpm(f64),
     ExplicitDuration(f64),
-    LengthDivider(u64),
+    LengthDivider(f64),
 }
 
 #[derive(Clone)]
-enum EventDuration {
+pub enum EventDuration {
     LengthNoteDiv(NoteDiv),
     Seconds(f64),
     BpmWithNoteDiv((f64, NoteDiv)),
@@ -384,7 +384,7 @@ fn hold(input: &str) -> IResult<&str, (Hold, Option<EventDuration>)> {
             Hold {
                 position: button,
                 break_,
-                duration: 0.,
+                duration: 0., // Must fill later
                 ex,
             },
             duration,
@@ -398,7 +398,7 @@ fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
     let sep = || char(',');
     let end = char('E');
     let bpm = || delimited(char('('), double, char(')'));
-    let length_divider = || delimited(char('{'), u64, char('}'));
+    let length_divider = || delimited(char('{'), double, char('}'));
 
     // Start of map requirements
     let start_of_map = context(
