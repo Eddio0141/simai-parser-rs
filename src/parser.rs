@@ -6,7 +6,8 @@ use nom::{
     bytes::complete::{tag, take, take_till1},
     character::complete::{char, multispace0, not_line_ending, u64, usize},
     combinator::{
-        all_consuming, cut, map, map_opt, map_parser, map_res, opt, peek, success, value, verify,
+        all_consuming, cut, map, map_opt, map_parser, map_res, not, opt, peek, success, value,
+        verify,
     },
     error::{ParseError, context},
     multi::{many_till, many0, many1},
@@ -47,7 +48,8 @@ fn button(input: &str) -> IResult<&str, Button> {
 }
 
 fn ex(input: &str) -> IResult<&str, bool> {
-    opt(char('x')).map(|v| v.is_some()).parse(input)
+    let (s, res) = opt(char('x')).parse(input)?;
+    Ok((s, res.is_some()))
 }
 
 fn sensor(input: &str) -> IResult<&str, Sensor> {
@@ -288,83 +290,110 @@ enum SlideWaitDuration {
     OneBeatAtCurrentBpm,
 }
 
-fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
-    let inote = file_field_start(preceded(tag("inote_"), u64));
+fn firework(input: &str) -> IResult<&str, bool> {
+    let (s, res) = opt(char('f')).parse(input)?;
 
-    let star_shaped_tap = || {
+    Ok((s, res.is_some()))
+}
+
+fn touch(input: &str) -> IResult<&str, Touch> {
+    let (s, (position, firework)) = pair(sensor, firework).parse(input)?;
+
+    Ok((s, Touch { position, firework }))
+}
+
+fn touch_hold(input: &str) -> IResult<&str, (TouchHold, Option<EventDuration>)> {
+    let (s, (position, (_, firework), duration)) = (
+        sensor,
+        permutation((char('h'), firework)),
+        opt(delimited(char('['), event_duration, char(']'))),
+    )
+        .parse(input)?;
+
+    Ok((
+        s,
+        (
+            TouchHold {
+                position,
+                duration: 0.,
+                firework,
+            },
+            duration,
+        ),
+    ))
+}
+
+fn tap(input: &str) -> IResult<&str, Tap> {
+    let star_shaped_tap = {
         opt(alt((
             value(StarShapedTap::Rotating, tag("$$")),
             value(StarShapedTap::NonRotating, char('$')),
         )))
     };
-    let tap = || {
-        (button, permutation((break_, ex, star_shaped_tap()))).map(
-            |(button, (break_, ex, star_shaped))| Tap {
+
+    let (s, (button, (break_, ex, star_shaped))) =
+        (button, permutation((break_, ex, star_shaped_tap))).parse(input)?;
+
+    Ok((
+        s,
+        Tap {
+            position: button,
+            break_,
+            ex,
+            star_shaped,
+        },
+    ))
+}
+
+fn tap_each(input: &str) -> IResult<&str, (Tap, Vec<TapEachData>)> {
+    let pseudo_each = opt(char('`')).map(|v| v.is_some());
+
+    // tap_each has no breaks
+    let (s, (button, taps)) = (button, many1((pseudo_each, button))).parse(input)?;
+
+    Ok((
+        s,
+        (
+            Tap {
+                position: button,
+                break_: false,
+                ex: false,
+                star_shaped: None,
+            },
+            taps.into_iter()
+                .map(|(psuedo_each, position)| TapEachData {
+                    position,
+                    psuedo_each,
+                })
+                .collect::<Vec<_>>(),
+        ),
+    ))
+}
+
+fn hold(input: &str) -> IResult<&str, (Hold, Option<EventDuration>)> {
+    let (s, (button, (_, break_, ex), duration)) = (
+        button,
+        permutation((char('h'), break_, ex)),
+        opt(delimited(char('['), event_duration, char(']'))),
+    )
+        .parse(input)?;
+
+    Ok((
+        s,
+        (
+            Hold {
                 position: button,
                 break_,
+                duration: 0.,
                 ex,
-                star_shaped,
             },
-        )
-    };
-    // tap_each has no breaks
-    let pseudo_each = || opt(char('`')).map(|v| v.is_some());
-    let tap_each = || {
-        (button, many1((pseudo_each(), button))).map(|(button, taps)| {
-            (
-                Tap {
-                    position: button,
-                    break_: false,
-                    ex: false,
-                    star_shaped: None,
-                },
-                taps.into_iter()
-                    .map(|(psuedo_each, position)| TapEachData {
-                        position,
-                        psuedo_each,
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
-    };
-    let hold = || {
-        (
-            button,
-            permutation((char('h'), break_, ex)),
-            opt(delimited(char('['), event_duration, char(']'))),
-        )
-            .map(|(button, (_, break_, ex), duration)| {
-                (
-                    Hold {
-                        position: button,
-                        break_,
-                        duration: 0.,
-                        ex,
-                    },
-                    duration,
-                )
-            })
-    };
-    let firework = || opt(char('f')).map(|v| v.is_some());
-    let touch =
-        || pair(sensor, firework()).map(|(position, firework)| Touch { position, firework });
-    let touch_hold = || {
-        (
-            sensor,
-            permutation((char('h'), firework())),
-            opt(delimited(char('['), event_duration, char(']'))),
-        )
-            .map(|(position, (_, firework), duration)| {
-                (
-                    TouchHold {
-                        position,
-                        duration: 0.,
-                        firework,
-                    },
-                    duration,
-                )
-            })
-    };
+            duration,
+        ),
+    ))
+}
+
+fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
+    let inote = file_field_start(preceded(tag("inote_"), u64));
 
     let sep = || char(',');
     let end = char('E');
@@ -394,12 +423,12 @@ fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
             "event",
             cut(terminated(
                 alt((
-                    map(hold(), Event::Hold),
+                    map(hold, Event::Hold),
                     map(slide, Event::Slide),
-                    map(tap_each(), Event::TapEach),
-                    map(tap(), Event::Tap),
-                    map(touch_hold(), Event::TouchHold),
-                    map(touch(), Event::Touch),
+                    map(tap_each, Event::TapEach),
+                    map(tap, Event::Tap),
+                    map(touch_hold, Event::TouchHold),
+                    map(touch, Event::Touch),
                     value(Event::Sep, sep()),
                     map(bpm(), Event::Bpm),
                     map(duration_secs, Event::ExplicitDuration),
@@ -416,7 +445,10 @@ fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
         inote,
         cut(start_of_map),
         multispace0,
-        many_till(pair(event(), many0(preceded(char('/'), event()))), end),
+        many_till(
+            pair(event(), many0(preceded(char('/'), event()))),
+            pair(not(sensor), end),
+        ),
     )
         .parse(input)?;
 
@@ -465,19 +497,22 @@ pub fn simai_file<'a>(
     let other_fields = pair(file_field_start(take_till1(|c| c == '=')), not_line_ending);
 
     let (input, _) = multispace0(input)?;
-    all_consuming(many0(terminated(
-        alt((
-            map(title, Field::Title),
-            map(artist, Field::Artist),
-            map(first, Field::First),
-            map(wholebpm, Field::WholeBpm),
-            map(des, Field::Designer),
-            map(lv, Field::Level),
-            map(simai_map, Field::INote),
-            map(other_fields, Field::OtherFields),
-        )),
-        multispace0,
-    )))
+    context(
+        "event parser",
+        all_consuming(many0(terminated(
+            alt((
+                map(title, Field::Title),
+                map(artist, Field::Artist),
+                map(first, Field::First),
+                map(wholebpm, Field::WholeBpm),
+                map(des, Field::Designer),
+                map(lv, Field::Level),
+                map(simai_map, Field::INote),
+                map(other_fields, Field::OtherFields),
+            )),
+            multispace0,
+        ))),
+    )
     .parse(input)
 }
 
@@ -688,5 +723,18 @@ mod tests {
                 variant: SlidePattern::ArcShort
             }
         );
+    }
+
+    #[test]
+    fn touch_test() {
+        let (s, touch) = touch("E1,A2").unwrap();
+        assert_eq!(s, ",A2");
+        assert_eq!(
+            touch,
+            Touch {
+                position: Sensor::E1,
+                firework: false
+            }
+        )
     }
 }
