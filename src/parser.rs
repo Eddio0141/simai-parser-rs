@@ -273,7 +273,7 @@ pub enum Event {
     Sep,
     Bpm(f64),
     ExplicitDuration(f64),
-    LengthDivider(f64),
+    LengthDivider(u64),
 }
 
 #[derive(Clone)]
@@ -398,7 +398,7 @@ fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
     let sep = || char(',');
     let end = char('E');
     let bpm = || delimited(char('('), double, char(')'));
-    let length_divider = || delimited(char('{'), double, char('}'));
+    let length_divider = || delimited(char('{'), u64, char('}'));
 
     // Start of map requirements
     let start_of_map = context(

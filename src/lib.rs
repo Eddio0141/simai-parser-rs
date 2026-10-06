@@ -6,10 +6,11 @@ use strum_macros::{EnumString, FromRepr};
 
 pub mod errors;
 mod parser;
+mod utils;
 
 pub use errors::*;
 
-use crate::parser::Field;
+use crate::parser::{EventDuration, Field};
 
 #[derive(Debug, Clone, PartialEq)]
 /// Represents a simai file
@@ -121,7 +122,7 @@ impl Map {
     fn parse_map_events(first: Option<f64>, events: impl Iterator<Item = parser::Event>) -> Self {
         let mut time = first.unwrap_or_default();
         let mut bpm = 1.;
-        let mut divider = 1.;
+        let mut divider = 1;
         let mut sep_secs = 1.;
 
         let mut res = Vec::new();
@@ -158,22 +159,45 @@ impl Map {
                         });
                     }
                 }
-                parser::Event::Hold((hold, duration)) => {}
+                parser::Event::Hold((mut hold, duration)) => {
+                    hold.duration = Self::parse_event_duration(duration, bpm);
+                    res.push(Event {
+                        time,
+                        event_type: EventType::Hold(hold),
+                    });
+                }
                 parser::Event::Slide(slide_event) => todo!(),
                 parser::Event::Touch(touch) => todo!(),
                 parser::Event::TouchHold(_) => todo!(),
                 parser::Event::Sep => time += sep_secs,
-                parser::Event::Bpm(value) => bpm = value,
+                parser::Event::Bpm(value) => {
+                    bpm = value;
+                    sep_secs = utils::calc_length_divider(bpm, divider);
+                }
                 // TODO: does this change BPM?
                 parser::Event::ExplicitDuration(value) => sep_secs = value,
                 parser::Event::LengthDivider(value) => {
-                    sep_secs = 240. / bpm / divider;
                     divider = value;
+                    sep_secs = utils::calc_length_divider(bpm, divider);
                 }
             }
         }
 
         Map { events: res }
+    }
+
+    fn parse_event_duration(duration: Option<EventDuration>, bpm: f64) -> f64 {
+        let Some(duration) = duration else { return 0. };
+
+        match duration {
+            EventDuration::LengthNoteDiv((div, mult)) => {
+                utils::calc_length_divider(bpm, div) * mult as f64
+            }
+            EventDuration::Seconds(secs) => secs,
+            EventDuration::BpmWithNoteDiv((bpm, (div, mult))) => {
+                utils::calc_length_divider(bpm, div) * mult as f64
+            }
+        }
     }
 }
 
