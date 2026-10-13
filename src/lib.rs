@@ -2,7 +2,7 @@ use exn::{Result, ensure};
 use nom::Finish;
 use nom_language::error::convert_error;
 use std::collections::HashMap;
-use strum_macros::{EnumString, FromRepr};
+use strum_macros::{Display, EnumString, FromRepr};
 
 pub mod errors;
 mod parser;
@@ -10,7 +10,9 @@ mod utils;
 
 pub use errors::*;
 
-use crate::parser::{EventDuration, Field};
+use crate::parser::{
+    EventDuration, Field, SlideData, SlideEvent, SlideTrackData, SlideWaitDuration,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 /// Represents a simai file
@@ -114,8 +116,8 @@ impl<'a> SimaiFile<'a> {
 pub struct Map {
     /// Map events, ordered by time
     ///
-    /// Some events happens at the same time
-    events: Vec<Event>,
+    /// Some events happens at the same time, in which case is ordered by whichever appears first in the file
+    pub events: Vec<Event>,
 }
 
 impl Map {
@@ -151,9 +153,11 @@ impl Map {
                         res.push(Event {
                             time: psuedo_time,
                             event_type: EventType::Tap(Tap {
-                                position: tap.position,
-                                break_: false,
-                                ex: false,
+                                data: TapData {
+                                    position: tap.position,
+                                    break_: false,
+                                    ex: false,
+                                },
                                 star_shaped: None,
                             }),
                         });
@@ -166,7 +170,15 @@ impl Map {
                         event_type: EventType::Hold(hold),
                     });
                 }
-                parser::Event::Slide(slide_event) => {}
+                parser::Event::Slide(slide_event) => {
+                    let SlideEvent { slide, multi } = slide_event;
+
+                    Self::parse_slide(slide, time, bpm, &mut res);
+
+                    for slide in multi {
+                        Self::parse_slide(slide, time, bpm, &mut res);
+                    }
+                }
                 parser::Event::Touch(touch) => {
                     res.push(Event {
                         time,
@@ -209,6 +221,37 @@ impl Map {
             }
         }
     }
+
+    fn parse_slide(slide: SlideData, time: f64, bpm: f64, res: &mut Vec<Event>) {
+        let SlideData {
+            mut slide,
+            wait,
+            tracks,
+        } = slide;
+
+        slide.wait_duration = match wait {
+            SlideWaitDuration::Seconds(secs) => secs,
+            SlideWaitDuration::OneBeatAtBpm(bpm) => 60. / bpm,
+            SlideWaitDuration::OneBeatAtCurrentBpm => 60. / bpm,
+        };
+
+        for track in tracks {
+            let SlideTrackData {
+                mut track,
+                length,
+                break_slide: _,
+            } = track;
+
+            track.duration = Self::parse_event_duration(Some(length), bpm);
+
+            slide.tracks.push(track);
+        }
+
+        res.push(Event {
+            time,
+            event_type: EventType::Slide(slide),
+        });
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -227,7 +270,7 @@ pub enum EventType {
     TouchHold(TouchHold),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr, Display)]
 /// Button, separate from sensor
 pub enum Button {
     A1 = 1,
@@ -240,7 +283,7 @@ pub enum Button {
     A8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display)]
 /// Touch sensor on the screen
 pub enum Sensor {
     A1,
@@ -280,14 +323,21 @@ pub enum Sensor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-/// Tap note
-pub struct Tap {
+/// Data for a tap
+pub struct TapData {
     /// Note position
     pub position: Button,
     /// Break note
     pub break_: bool,
     /// Ex note
     pub ex: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Tap note
+pub struct Tap {
+    /// Data of this tap
+    pub data: TapData,
     /// Properties of a star shaped tap
     pub star_shaped: Option<StarShapedTap>,
 }
@@ -315,26 +365,23 @@ pub struct Hold {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Slide {
-    /// Slide tap and slide track start
-    pub start: Button,
-    /// If the slide tap is break
-    pub break_tap: bool,
-    /// Ex note for the tap
-    pub ex_tap: bool,
-    /// If the slide track is break
-    pub break_slide: bool,
-    /// Special slide tap properties
-    pub special_tap: Option<SpecialSlideTap>,
+    /// Slide tap properties
+    pub tap: SlideTap,
     /// Number of seconds to wait before the slide star moves
     pub wait_duration: f64,
+    /// If the slide tracks are break
+    pub break_slide: bool,
     /// All sequence of tracks of this slide
     pub tracks: Vec<SlideTrack>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SpecialSlideTap {
-    /// Changes the starting star-shaped tap to be normal
-    NormalTap,
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Possible taps for a slide
+pub enum SlideTap {
+    /// The default star-shaped tap
+    StarTap(TapData),
+    /// A tap but not star-shaped
+    NormalTap(TapData),
     /// Removes the star-shaped tap, and the tracing star fades in before moving
     NoStarTapFadeIn,
     /// Removes the star-shaped tap, and the tracing star appears when moving
