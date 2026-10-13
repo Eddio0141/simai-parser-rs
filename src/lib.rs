@@ -151,9 +151,11 @@ impl Map {
                         res.push(Event {
                             time: psuedo_time,
                             event_type: EventType::Tap(Tap {
-                                position: tap.position,
-                                break_: false,
-                                ex: false,
+                                data: TapData {
+                                    position: tap.position,
+                                    break_: false,
+                                    ex: false,
+                                },
                                 star_shaped: None,
                             }),
                         });
@@ -280,14 +282,21 @@ pub enum Sensor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-/// Tap note
-pub struct Tap {
+/// Data for a tap
+pub struct TapData {
     /// Note position
     pub position: Button,
     /// Break note
     pub break_: bool,
     /// Ex note
     pub ex: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Tap note
+pub struct Tap {
+    /// Data of this tap
+    pub data: TapData,
     /// Properties of a star shaped tap
     pub star_shaped: Option<StarShapedTap>,
 }
@@ -315,26 +324,23 @@ pub struct Hold {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Slide {
-    /// Slide tap and slide track start
-    pub start: Button,
-    /// If the slide tap is break
-    pub break_tap: bool,
-    /// Ex note for the tap
-    pub ex_tap: bool,
-    /// If the slide track is break
-    pub break_slide: bool,
-    /// Special slide tap properties
-    pub special_tap: Option<SpecialSlideTap>,
+    /// Slide tap properties
+    pub tap: SlideTap,
     /// Number of seconds to wait before the slide star moves
     pub wait_duration: f64,
+    /// If the slide tracks are break
+    pub break_slide: bool,
     /// All sequence of tracks of this slide
     pub tracks: Vec<SlideTrack>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SpecialSlideTap {
-    /// Changes the starting star-shaped tap to be normal
-    NormalTap,
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Possible taps for a slide
+pub enum SlideTap {
+    /// The default star-shaped tap
+    StarTap(TapData),
+    /// A tap but not star-shaped
+    NormalTap(TapData),
     /// Removes the star-shaped tap, and the tracing star fades in before moving
     NoStarTapFadeIn,
     /// Removes the star-shaped tap, and the tracing star appears when moving

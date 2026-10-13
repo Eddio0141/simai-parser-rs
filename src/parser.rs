@@ -17,7 +17,7 @@ use nom::{
 use nom_language::error::VerboseError;
 
 use crate::{
-    Button, Hold, Sensor, Slide, SlidePattern, SlideTrack, SpecialSlideTap, StarShapedTap, Tap,
+    Button, Hold, Sensor, Slide, SlidePattern, SlideTap, SlideTrack, StarShapedTap, Tap, TapData,
     Touch, TouchHold,
 };
 
@@ -191,26 +191,37 @@ fn slide(input: &str) -> IResult<&str, SlideEvent> {
         })
     };
     let slide_no_start_button = || {
-        (alt((slide_track_diff_len(), slide_track_same_len()))).map(|(tracks, wait)| SlideData {
+        (alt((slide_track_diff_len(), slide_track_same_len())))
+        //     .map(|(tracks, wait)| SlideData {
+        //         slide: Slide {
+        //             start: Button::A1, // Must fill later
+        //             break_tap: false,  // Must fill later
+        //             break_slide: tracks[0].break_slide,
+        //             wait_duration: 0.,  // Must fill later
+        //             tracks: Vec::new(), // Must fill later
+        //             tap: None,          // Filled in down below
+        //             ex_tap: false,      // Filled in down below
+        //         },
+        //         tracks,
+        //         wait,
+        //     })
+    };
+    let special_tap = opt(alt((
+        value(SlideTapRaw::NormalTap, char('@')),
+        value(SlideTapRaw::NoStarTapFadeIn, char('?')),
+        value(SlideTapRaw::NoStarTapInstant, char('!')),
+    )));
+    let slide_multi =
+        preceded(char('*'), slide_no_start_button()).map(|(tracks, wait)| SlideData {
             slide: Slide {
-                start: Button::A1, // Must fill later
-                break_tap: false,  // Must fill later
                 break_slide: tracks[0].break_slide,
                 wait_duration: 0.,  // Must fill later
                 tracks: Vec::new(), // Must fill later
-                special_tap: None,  // Filled in down below
-                ex_tap: false,      // Filled in down below
+                tap: SlideTap::NoStarTapFadeIn,
             },
             tracks,
             wait,
-        })
-    };
-    let special_tap = opt(alt((
-        value(SpecialSlideTap::NormalTap, char('@')),
-        value(SpecialSlideTap::NoStarTapFadeIn, char('?')),
-        value(SpecialSlideTap::NoStarTapInstant, char('!')),
-    )));
-    let slide_multi = preceded(char('*'), slide_no_start_button());
+        });
 
     let (s, (start, (ex, break_note, special_tap), mut slide, multi)) = (
         button,
@@ -221,7 +232,7 @@ fn slide(input: &str) -> IResult<&str, SlideEvent> {
         .parse(input)?;
 
     slide.slide.ex_tap = ex;
-    slide.slide.special_tap = special_tap;
+    slide.slide.tap = special_tap;
 
     Ok((
         s,
@@ -254,6 +265,13 @@ pub struct SlideEvent {
     slide: SlideData,
     break_note: bool,
     multi: Vec<SlideData>,
+}
+
+#[derive(Clone)]
+enum SlideTapRaw {
+    NormalTap,
+    NoStarTapFadeIn,
+    NoStarTapInstant,
 }
 
 #[derive(Clone)]
@@ -337,9 +355,11 @@ fn tap(input: &str) -> IResult<&str, Tap> {
     Ok((
         s,
         Tap {
-            position: button,
-            break_,
-            ex,
+            data: TapData {
+                position: button,
+                break_,
+                ex,
+            },
             star_shaped,
         },
     ))
@@ -355,9 +375,11 @@ fn tap_each(input: &str) -> IResult<&str, (Tap, Vec<TapEachData>)> {
         s,
         (
             Tap {
-                position: button,
-                break_: false,
-                ex: false,
+                data: TapData {
+                    position: button,
+                    break_: false,
+                    ex: false,
+                },
                 star_shaped: None,
             },
             taps.into_iter()
@@ -615,7 +637,7 @@ mod tests {
                 break_slide: false,
                 wait_duration: 0.,
                 tracks: Vec::new(),
-                special_tap: None,
+                tap: None,
                 ex_tap: false
             }
         );
