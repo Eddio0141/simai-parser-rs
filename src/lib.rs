@@ -166,15 +166,25 @@ impl Map {
                         event_type: EventType::Hold(hold),
                     });
                 }
-                parser::Event::Slide(slide_event) => todo!(),
-                parser::Event::Touch(touch) => todo!(),
-                parser::Event::TouchHold(_) => todo!(),
+                parser::Event::Slide(slide_event) => {}
+                parser::Event::Touch(touch) => {
+                    res.push(Event {
+                        time,
+                        event_type: EventType::Touch(touch),
+                    });
+                }
+                parser::Event::TouchHold((mut hold, duration)) => {
+                    hold.duration = Self::parse_event_duration(duration, bpm);
+                    res.push(Event {
+                        time,
+                        event_type: EventType::TouchHold(hold),
+                    });
+                }
                 parser::Event::Sep => time += sep_secs,
                 parser::Event::Bpm(value) => {
                     bpm = value;
                     sep_secs = utils::calc_length_divider(bpm, divider);
                 }
-                // TODO: does this change BPM?
                 parser::Event::ExplicitDuration(value) => sep_secs = value,
                 parser::Event::LengthDivider(value) => {
                     divider = value;
