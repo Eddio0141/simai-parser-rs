@@ -65,10 +65,10 @@ fn break_(input: &str) -> IResult<&str, bool> {
     Ok((s, value.is_some()))
 }
 
-type NoteDiv = (u64, u64);
+type NoteDiv = (u64, f64);
 
 fn length_note_div(input: &str) -> IResult<&str, NoteDiv> {
-    separated_pair(u64, char(':'), u64).parse(input)
+    separated_pair(u64, char(':'), double).parse(input)
 }
 
 fn duration_secs(input: &str) -> IResult<&str, f64> {
@@ -143,7 +143,15 @@ fn slide(input: &str) -> IResult<&str, SlideEvent> {
             "slide_track_same_len",
             (many1((slide_pat(), button)), pair(break_, slide_len())),
         )
-        .map(|(tracks, (break_slide, (wait, length)))| {
+        .map(|(tracks, (break_slide, (wait, mut length)))| {
+            let tracks_div = tracks.len() as f64;
+
+            match &mut length {
+                EventDuration::Seconds(secs) => *secs /= tracks_div,
+                EventDuration::BpmWithNoteDiv((_, (_, mult)))
+                | EventDuration::LengthNoteDiv((_, mult)) => *mult /= tracks_div,
+            }
+
             (
                 tracks
                     .into_iter()
@@ -659,7 +667,7 @@ mod tests {
             }
         );
         assert!(
-            matches!(track.length, EventDuration::LengthNoteDiv(div) if div.0 == 1 && div.1 == 2)
+            matches!(track.length, EventDuration::LengthNoteDiv(div) if div.0 == 1 && div.1 == 2.)
         );
     }
 
@@ -671,7 +679,7 @@ mod tests {
             SlideWaitDuration::OneBeatAtBpm(bpm) if bpm == 160.
         ));
         assert!(
-            matches!(res.slide.tracks[0].length, EventDuration::BpmWithNoteDiv((bpm, div)) if bpm == 160. && div.0 == 8 && div.1 == 3)
+            matches!(res.slide.tracks[0].length, EventDuration::BpmWithNoteDiv((bpm, div)) if bpm == 160. && div.0 == 8 && div.1 == 3.)
         );
 
         let (_, res) = slide("1-4[160#2]").unwrap();
@@ -694,7 +702,7 @@ mod tests {
             SlideWaitDuration::Seconds(secs) if secs == 3.
         ));
         assert!(
-            matches!(res.slide.tracks[0].length, EventDuration::LengthNoteDiv(div) if div.0 == 8 && div.1 == 3)
+            matches!(res.slide.tracks[0].length, EventDuration::LengthNoteDiv(div) if div.0 == 8 && div.1 == 3.)
         );
 
         let (_, res) = slide("1-4[3##160#8:3]").unwrap();
@@ -703,7 +711,7 @@ mod tests {
             SlideWaitDuration::Seconds(secs) if secs == 3.
         ));
         assert!(
-            matches!(res.slide.tracks[0].length, EventDuration::BpmWithNoteDiv((bpm, div)) if bpm == 160. && div.0 == 8 && div.1 == 3)
+            matches!(res.slide.tracks[0].length, EventDuration::BpmWithNoteDiv((bpm, div)) if bpm == 160. && div.0 == 8 && div.1 == 3.)
         );
     }
 
@@ -712,7 +720,7 @@ mod tests {
         let (_, res) = slide("2-4v7^4[8:3]").unwrap();
         assert_eq!(res.slide.tracks.len(), 3);
         assert!(
-            matches!(res.slide.tracks[0].length, EventDuration::LengthNoteDiv(div) if div.0 == 8 && div.1 ==3)
+            matches!(res.slide.tracks[0].length, EventDuration::LengthNoteDiv(div) if div.0 == 8 && div.1 == 1.)
         );
         assert_eq!(
             res.slide.tracks[0].track,
@@ -724,7 +732,7 @@ mod tests {
             }
         );
         assert!(
-            matches!(res.slide.tracks[1].length, EventDuration::LengthNoteDiv(div) if div.0 == 8 && div.1 ==3)
+            matches!(res.slide.tracks[1].length, EventDuration::LengthNoteDiv(div) if div.0 == 8 && div.1 == 1.)
         );
         assert_eq!(
             res.slide.tracks[1].track,
@@ -736,7 +744,7 @@ mod tests {
             }
         );
         assert!(
-            matches!(res.slide.tracks[2].length, EventDuration::LengthNoteDiv(div) if div.0 == 8 && div.1 ==3)
+            matches!(res.slide.tracks[2].length, EventDuration::LengthNoteDiv(div) if div.0 == 8 && div.1 == 1.)
         );
         assert_eq!(
             res.slide.tracks[2].track,

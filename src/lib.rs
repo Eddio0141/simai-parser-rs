@@ -213,11 +213,11 @@ impl Map {
 
         match duration {
             EventDuration::LengthNoteDiv((div, mult)) => {
-                utils::calc_length_divider(bpm, div) * mult as f64
+                utils::calc_length_divider(bpm, div) * mult
             }
             EventDuration::Seconds(secs) => secs,
             EventDuration::BpmWithNoteDiv((bpm, (div, mult))) => {
-                utils::calc_length_divider(bpm, div) * mult as f64
+                utils::calc_length_divider(bpm, div) * mult
             }
         }
     }
