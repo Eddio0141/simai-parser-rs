@@ -86,6 +86,7 @@ fn main() {
                     wait_duration,
                     break_slide,
                     tracks,
+                    total_track_duration,
                 }) => {
                     print!("Slide, ");
                     match &tap {
@@ -112,7 +113,7 @@ fn main() {
 
                     print!("wait: {wait_duration:.4}s, break slide: {break_slide}, ");
 
-                    print!("tracks: [");
+                    print!("tracks ({total_track_duration:.4}s): [");
                     let mut first = true;
                     for track in tracks {
                         let SlideTrack {

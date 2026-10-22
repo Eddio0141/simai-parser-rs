@@ -208,8 +208,9 @@ fn slide(input: &str) -> IResult<&str, SlideEvent> {
         preceded(char('*'), slide_no_start_button()).map(|(tracks, wait)| SlideData {
             slide: Slide {
                 break_slide: tracks[0].break_slide,
-                wait_duration: 0.,  // Must fill later
-                tracks: Vec::new(), // Must fill later
+                wait_duration: 0.,        // Must fill later
+                total_track_duration: 0., // Must fill later
+                tracks: Vec::new(),       // Must fill later
                 tap: SlideTap::NoStarTapFadeIn,
             },
             tracks,
@@ -248,7 +249,8 @@ fn slide(input: &str) -> IResult<&str, SlideEvent> {
     let slide = SlideData {
         slide: Slide {
             tap,
-            wait_duration: 0., // Must fill later
+            wait_duration: 0.,        // Must fill later
+            total_track_duration: 0., // Must fill later
             break_slide: tracks[0].break_slide,
             tracks: Vec::with_capacity(tracks.len()), // Must fill later
         },
@@ -647,6 +649,7 @@ mod tests {
                     ex: false
                 }),
                 wait_duration: 0.,
+                total_track_duration: 0.,
                 break_slide: false,
                 tracks: Vec::new()
             }

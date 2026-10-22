@@ -244,6 +244,7 @@ impl Map {
 
             track.duration = Self::parse_event_duration(Some(length), bpm);
 
+            slide.total_track_duration += track.duration;
             slide.tracks.push(track);
         }
 
@@ -369,6 +370,8 @@ pub struct Slide {
     pub tap: SlideTap,
     /// Number of seconds to wait before the slide star moves
     pub wait_duration: f64,
+    /// Total track duration in seconds
+    pub total_track_duration: f64,
     /// If the slide tracks are break
     pub break_slide: bool,
     /// All sequence of tracks of this slide
