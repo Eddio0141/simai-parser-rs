@@ -18,7 +18,7 @@ use nom_language::error::VerboseError;
 
 use crate::{
     Button, Hold, Sensor, Slide, SlidePattern, SlideTap, SlideTrack, StarShapedTap, Tap, TapData,
-    Touch, TouchHold,
+    Touch, TouchHold, TouchPosition,
 };
 
 type IResult<I, O, E = VerboseError<I>> = Result<(I, O), Err<E>>;
@@ -53,11 +53,7 @@ fn ex(input: &str) -> IResult<&str, bool> {
 }
 
 fn sensor(input: &str) -> IResult<&str, Sensor> {
-    context(
-        "sensor",
-        map_res(alt((tag("C"), take(2usize))), Sensor::from_str),
-    )
-    .parse(input)
+    context("sensor", map_res(take(2usize), Sensor::from_str)).parse(input)
 }
 
 fn break_(input: &str) -> IResult<&str, bool> {
@@ -328,15 +324,25 @@ fn firework(input: &str) -> IResult<&str, bool> {
     Ok((s, res.is_some()))
 }
 
+fn touch_position(input: &str) -> IResult<&str, TouchPosition> {
+    let (s, position) = alt((
+        sensor.map(TouchPosition::Sensor),
+        value(TouchPosition::Center, char('C')),
+    ))
+    .parse(input)?;
+
+    Ok((s, position))
+}
+
 fn touch(input: &str) -> IResult<&str, Touch> {
-    let (s, (position, firework)) = pair(sensor, firework).parse(input)?;
+    let (s, (position, firework)) = pair(touch_position, firework).parse(input)?;
 
     Ok((s, Touch { position, firework }))
 }
 
 fn touch_hold(input: &str) -> IResult<&str, (TouchHold, Option<EventDuration>)> {
     let (s, (position, (_, firework), duration)) = (
-        sensor,
+        touch_position,
         permutation((char('h'), firework)),
         opt(delimited(char('['), event_duration, char(']'))),
     )
@@ -767,9 +773,42 @@ mod tests {
         assert_eq!(
             touch,
             Touch {
-                position: Sensor::E1,
+                position: TouchPosition::Sensor(Sensor::E1),
                 firework: false
             }
-        )
+        );
+    }
+
+    #[test]
+    fn touch_center() {
+        let (s, value) = touch("C1,").unwrap();
+        assert_eq!(s, ",");
+        assert_eq!(
+            value,
+            Touch {
+                position: TouchPosition::Sensor(Sensor::C1),
+                firework: false
+            }
+        );
+
+        let (s, value) = touch("C,").unwrap();
+        assert_eq!(s, ",");
+        assert_eq!(
+            value,
+            Touch {
+                position: TouchPosition::Center,
+                firework: false
+            }
+        );
+
+        let (s, value) = touch("C2,").unwrap();
+        assert_eq!(s, ",");
+        assert_eq!(
+            value,
+            Touch {
+                position: TouchPosition::Sensor(Sensor::C2),
+                firework: false
+            }
+        );
     }
 }

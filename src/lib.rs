@@ -438,11 +438,22 @@ pub enum SlidePattern {
     Fan,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Display)]
+/// Position of the touch note
+pub enum TouchPosition {
+    /// Note appears at the sensor
+    #[strum(to_string = "{0}")]
+    Sensor(Sensor),
+    /// Both C1 and C2 is used for the center
+    #[strum(to_string = "C")]
+    Center,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Touch note
 pub struct Touch {
     /// Note position
-    pub position: Sensor,
+    pub position: TouchPosition,
     /// If the touch has a firework effect
     pub firework: bool,
 }
@@ -451,7 +462,7 @@ pub struct Touch {
 /// Touch hold note
 pub struct TouchHold {
     /// Note position
-    pub position: Sensor,
+    pub position: TouchPosition,
     /// Duration of hold in seconds
     pub duration: f64,
     /// If the touch has a firework effect
