@@ -4,13 +4,13 @@ use nom::{
     Err, Parser,
     branch::{alt, permutation},
     bytes::complete::{tag, take, take_till1},
-    character::complete::{char, multispace0, not_line_ending, u64, usize},
+    character::complete::{char, multispace0, multispace1, not_line_ending, u64, usize},
     combinator::{
         all_consuming, cut, map, map_opt, map_parser, map_res, not, opt, peek, success, value,
         verify,
     },
     error::{ParseError, context},
-    multi::{many_till, many0, many1},
+    multi::{fold_many0, many_till, many0, many1},
     number::complete::double,
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
@@ -434,6 +434,14 @@ fn hold(input: &str) -> IResult<&str, (Hold, Option<EventDuration>)> {
     ))
 }
 
+fn whitespace(input: &str) -> IResult<&str, ()> {
+    let comment = preceded(tag("||"), value((), not_line_ending));
+
+    let (s, _) = many0(alt((comment, value((), multispace1)))).parse(input)?;
+
+    Ok((s, ()))
+}
+
 fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
     let inote = file_field_start(preceded(tag("inote_"), u64));
 
@@ -447,16 +455,13 @@ fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
         "start of the map",
         permutation((
             preceded(
-                multispace0,
+                whitespace,
                 alt((
                     map(bpm(), Event::Bpm),
                     map(duration_secs, Event::ExplicitDuration),
                 )),
             ),
-            map(
-                preceded(multispace0, length_divider()),
-                Event::LengthDivider,
-            ),
+            map(preceded(whitespace, length_divider()), Event::LengthDivider),
         )),
     );
 
@@ -476,17 +481,17 @@ fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
                     map(duration_secs, Event::ExplicitDuration),
                     map(length_divider(), Event::LengthDivider),
                 )),
-                multispace0,
+                whitespace,
             )),
         )
     };
 
-    let (input, _) = multispace0(input)?;
+    let (input, _) = whitespace(input)?;
 
     let (input, (inote, initial_events, _, (events, _))) = (
         inote,
         cut(start_of_map),
-        multispace0,
+        whitespace,
         many_till(
             pair(event(), many0(preceded(char('/'), event()))),
             pair(not(sensor), end),
@@ -538,7 +543,7 @@ pub fn simai_file<'a>(
     );
     let other_fields = pair(file_field_start(take_till1(|c| c == '=')), not_line_ending);
 
-    let (input, _) = multispace0(input)?;
+    let (input, _) = whitespace(input)?;
     context(
         "event parser",
         all_consuming(many0(terminated(
@@ -552,7 +557,7 @@ pub fn simai_file<'a>(
                 map(simai_map, Field::INote),
                 map(other_fields, Field::OtherFields),
             )),
-            multispace0,
+            whitespace,
         ))),
     )
     .parse(input)
@@ -810,5 +815,20 @@ mod tests {
                 firework: false
             }
         );
+    }
+
+    #[test]
+    fn whitespace_test() {
+        let (s, _) = whitespace("    1").unwrap();
+        assert_eq!(s, "1");
+
+        let (s, _) = whitespace("|| hello!").unwrap();
+        assert!(s.is_empty());
+
+        let (s, _) = whitespace("|| hello!\r\n1").unwrap();
+        assert_eq!(s, "1");
+
+        let (s, _) = whitespace("   || hello!\r\n1").unwrap();
+        assert_eq!(s, "1");
     }
 }
