@@ -124,7 +124,7 @@ impl Map {
     fn parse_map_events(first: Option<f64>, events: impl Iterator<Item = parser::Event>) -> Self {
         let mut time = first.unwrap_or_default();
         let mut bpm = 1.;
-        let mut divider = 1;
+        let mut divider = 1.;
         let mut sep_secs = 1.;
 
         let mut res = Vec::new();
