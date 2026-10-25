@@ -408,7 +408,7 @@ pub struct SlideTrack {
 #[allow(non_camel_case_types)]
 /// Slide pattern
 ///
-/// Currently this follows the specs noted in https://w.atwiki.jp/simai/pages/1003.html#id_a16709b9
+/// Currently this follows the 3simai specs noted in https://w.atwiki.jp/simai/pages/25.html
 pub enum SlidePattern {
     /// A straight line
     Line,
