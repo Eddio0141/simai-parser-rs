@@ -597,6 +597,12 @@ mod tests {
         let (s, num) = field_with_num("_123=foo").unwrap();
         assert_eq!(s, "=foo");
         assert_eq!(num, 123);
+
+        let (s, title) = file_field_line(tag::<_, _, ()>("title"))
+            .parse("&title=マリオなんちゃら\n")
+            .unwrap();
+        assert_eq!(s, "\n");
+        assert_eq!(title, "マリオなんちゃら");
     }
 
     #[test]
