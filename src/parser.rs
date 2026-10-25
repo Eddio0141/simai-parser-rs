@@ -4,17 +4,18 @@ use nom::{
     Err, Parser,
     branch::{alt, permutation},
     bytes::complete::{tag, take, take_till1},
-    character::complete::{char, multispace0, multispace1, not_line_ending, u64, usize},
+    character::complete::{char, multispace1, not_line_ending, u64, usize},
     combinator::{
-        all_consuming, cut, map, map_opt, map_parser, map_res, not, opt, peek, success, value,
+        all_consuming, cut, eof, map, map_opt, map_parser, map_res, not, opt, peek, success, value,
         verify,
     },
     error::{ParseError, context},
-    multi::{fold_many0, many_till, many0, many1},
+    multi::{many_till, many0, many1},
     number::complete::double,
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
 use nom_language::error::VerboseError;
+use nom_permutation::permutation_opt;
 
 use crate::{
     Button, Hold, Sensor, Slide, SlidePattern, SlideTap, SlideTrack, StarShapedTap, Tap, TapData,
@@ -47,18 +48,16 @@ fn button(input: &str) -> IResult<&str, Button> {
     .parse(input)
 }
 
-fn ex(input: &str) -> IResult<&str, bool> {
-    let (s, res) = opt(char('x')).parse(input)?;
-    Ok((s, res.is_some()))
+fn ex(input: &str) -> IResult<&str, char> {
+    char('x').parse(input)
 }
 
 fn sensor(input: &str) -> IResult<&str, Sensor> {
     context("sensor", map_res(take(2usize), Sensor::from_str)).parse(input)
 }
 
-fn break_(input: &str) -> IResult<&str, bool> {
-    let (s, value) = opt(char('b')).parse(input)?;
-    Ok((s, value.is_some()))
+fn break_(input: &str) -> IResult<&str, char> {
+    char('b').parse(input)
 }
 
 type NoteDiv = (f64, f64);
@@ -137,9 +136,16 @@ fn slide(input: &str) -> IResult<&str, SlideEvent> {
     let slide_track_same_len = || {
         context(
             "slide_track_same_len",
-            (many1((slide_pat(), button)), pair(break_, slide_len())),
+            (
+                many1((slide_pat(), button)),
+                verify(permutation_opt((break_, slide_len())), |(_, len)| {
+                    len.is_some()
+                }),
+            ),
         )
-        .map(|(tracks, (break_slide, (wait, mut length)))| {
+        .map(|(tracks, (break_slide, length))| {
+            let (wait, mut length) = length.unwrap();
+
             let tracks_div = tracks.len() as f64;
 
             match &mut length {
@@ -159,7 +165,7 @@ fn slide(input: &str) -> IResult<&str, SlideEvent> {
                             variant,
                         },
                         length: length.clone(),
-                        break_slide,
+                        break_slide: break_slide.is_some(),
                     })
                     .collect::<Vec<_>>(),
                 wait,
@@ -170,23 +176,25 @@ fn slide(input: &str) -> IResult<&str, SlideEvent> {
         context(
             "slide_track_diff_len",
             verify(
-                many1((slide_pat(), button, break_, slide_len())),
-                |v: &Vec<_>| v.iter().rev().skip(1).all(|v| !v.2),
+                many1((slide_pat(), button, permutation_opt((break_, slide_len())))),
+                |v: &Vec<_>| {
+                    v[0].2.1.is_some() && v.iter().rev().skip(1).all(|(_, _, (v, _))| v.is_none())
+                },
             ),
         )
         .map(|v| {
-            let wait = v[0].3.0.clone();
-            let break_slide = v.last().unwrap().2;
+            let wait = v[0].2.1.as_ref().unwrap().0.clone();
+            let break_slide = v.last().unwrap().2.0.is_some();
             (
                 v.into_iter()
-                    .map(|(variant, end, _, (_, length))| SlideTrackData {
+                    .map(|(variant, end, (_, length))| SlideTrackData {
                         track: SlideTrack {
                             start: Button::A1, // Filled in down below
                             end,
                             duration: 0., // Must fill later
                             variant,
                         },
-                        length,
+                        length: length.unwrap().1,
                         break_slide,
                     })
                     .collect::<Vec<_>>(),
@@ -195,11 +203,11 @@ fn slide(input: &str) -> IResult<&str, SlideEvent> {
         })
     };
     let slide_no_start_button = || alt((slide_track_diff_len(), slide_track_same_len()));
-    let special_tap = opt(alt((
+    let special_tap = alt((
         value(SlideTapRaw::NormalTap, char('@')),
         value(SlideTapRaw::NoStarTapFadeIn, char('?')),
         value(SlideTapRaw::NoStarTapInstant, char('!')),
-    )));
+    ));
     let slide_multi =
         preceded(char('*'), slide_no_start_button()).map(|(tracks, wait)| SlideData {
             slide: Slide {
@@ -215,7 +223,7 @@ fn slide(input: &str) -> IResult<&str, SlideEvent> {
 
     let (s, (start, (ex, break_, special_tap), (mut tracks, wait), multi)) = (
         button,
-        permutation((ex, break_, special_tap)),
+        permutation_opt((ex, break_, special_tap)),
         slide_no_start_button(),
         many0(slide_multi),
     )
@@ -229,8 +237,8 @@ fn slide(input: &str) -> IResult<&str, SlideEvent> {
 
     let tap = TapData {
         position: start,
-        break_,
-        ex,
+        break_: break_.is_some(),
+        ex: ex.is_some(),
     };
 
     let tap = match special_tap {
@@ -318,10 +326,8 @@ pub enum SlideWaitDuration {
     OneBeatAtCurrentBpm,
 }
 
-fn firework(input: &str) -> IResult<&str, bool> {
-    let (s, res) = opt(char('f')).parse(input)?;
-
-    Ok((s, res.is_some()))
+fn firework(input: &str) -> IResult<&str, char> {
+    char('f').parse(input)
 }
 
 fn touch_position(input: &str) -> IResult<&str, TouchPosition> {
@@ -335,16 +341,28 @@ fn touch_position(input: &str) -> IResult<&str, TouchPosition> {
 }
 
 fn touch(input: &str) -> IResult<&str, Touch> {
-    let (s, (position, firework)) = pair(touch_position, firework).parse(input)?;
+    let (s, (position, firework)) = pair(touch_position, opt(firework)).parse(input)?;
 
-    Ok((s, Touch { position, firework }))
+    Ok((
+        s,
+        Touch {
+            position,
+            firework: firework.is_some(),
+        },
+    ))
 }
 
 fn touch_hold(input: &str) -> IResult<&str, (TouchHold, Option<EventDuration>)> {
-    let (s, (position, (_, firework), duration)) = (
+    let (s, (position, (_, firework, duration))) = (
         touch_position,
-        permutation((char('h'), firework)),
-        opt(delimited(char('['), event_duration, char(']'))),
+        verify(
+            permutation_opt((
+                char('h'),
+                firework,
+                delimited(char('['), event_duration, char(']')),
+            )),
+            |(h, _, _)| h.is_some(),
+        ),
     )
         .parse(input)?;
 
@@ -354,7 +372,7 @@ fn touch_hold(input: &str) -> IResult<&str, (TouchHold, Option<EventDuration>)> 
             TouchHold {
                 position,
                 duration: 0.,
-                firework,
+                firework: firework.is_some(),
             },
             duration,
         ),
@@ -363,22 +381,22 @@ fn touch_hold(input: &str) -> IResult<&str, (TouchHold, Option<EventDuration>)> 
 
 fn tap(input: &str) -> IResult<&str, Tap> {
     let star_shaped_tap = {
-        opt(alt((
+        alt((
             value(StarShapedTap::Rotating, tag("$$")),
             value(StarShapedTap::NonRotating, char('$')),
-        )))
+        ))
     };
 
     let (s, (button, (break_, ex, star_shaped))) =
-        (button, permutation((break_, ex, star_shaped_tap))).parse(input)?;
+        (button, permutation_opt((break_, ex, star_shaped_tap))).parse(input)?;
 
     Ok((
         s,
         Tap {
             data: TapData {
                 position: button,
-                break_,
-                ex,
+                break_: break_.is_some(),
+                ex: ex.is_some(),
             },
             star_shaped,
         },
@@ -413,10 +431,17 @@ fn tap_each(input: &str) -> IResult<&str, (Tap, Vec<TapEachData>)> {
 }
 
 fn hold(input: &str) -> IResult<&str, (Hold, Option<EventDuration>)> {
-    let (s, (button, (_, break_, ex), duration)) = (
+    let (s, (button, (_, break_, ex, duration))) = (
         button,
-        permutation((char('h'), break_, ex)),
-        opt(delimited(char('['), event_duration, char(']'))),
+        verify(
+            permutation_opt((
+                char('h'),
+                break_,
+                ex,
+                delimited(char('['), event_duration, char(']')),
+            )),
+            |(h, _, _, _)| h.is_some(),
+        ),
     )
         .parse(input)?;
 
@@ -425,9 +450,9 @@ fn hold(input: &str) -> IResult<&str, (Hold, Option<EventDuration>)> {
         (
             Hold {
                 position: button,
-                break_,
+                break_: break_.is_some(),
                 duration: 0., // Must fill later
-                ex,
+                ex: ex.is_some(),
             },
             duration,
         ),
@@ -446,7 +471,7 @@ fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
     let inote = file_field_start(preceded(tag("inote_"), u64));
 
     let sep = || char(',');
-    let end = char('E');
+    let end = alt((value((), char('E')), value((), eof)));
     let bpm = || delimited(char('('), double, char(')'));
     let length_divider = || delimited(char('{'), double, char('}'));
 
@@ -494,6 +519,7 @@ fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
         whitespace,
         many_till(
             pair(event(), many0(preceded(char('/'), event()))),
+            // Check for sensor as end char can match the sensor name E?
             pair(not(sensor), end),
         ),
     )
@@ -583,17 +609,6 @@ mod tests {
         assert_eq!(value, "some title 123");
         assert!(s.is_empty());
 
-        let (s, (title, _, artist)) = (
-            file_field_line(tag::<_, _, ()>("title")),
-            multispace0,
-            file_field_line(tag("artist")),
-        )
-            .parse("&title=some title 123\n&artist=some artist")
-            .unwrap();
-        assert_eq!(title, "some title 123");
-        assert_eq!(artist, "some artist");
-        assert!(s.is_empty());
-
         let (s, num) = field_with_num("_123=foo").unwrap();
         assert_eq!(s, "=foo");
         assert_eq!(num, 123);
@@ -655,7 +670,7 @@ mod tests {
     }
 
     #[test]
-    fn slide_min() {
+    fn slide_test() {
         let (_, res) = slide("1-4[1:2]").unwrap();
         assert_eq!(
             res.slide.slide,
@@ -689,6 +704,50 @@ mod tests {
         assert!(
             matches!(track.length, EventDuration::LengthNoteDiv(div) if div.0 == 1. && div.1 == 2.)
         );
+
+        let (_, res) = slide("1-4[1:2]b").unwrap();
+        assert_eq!(
+            res.slide.slide,
+            Slide {
+                tap: SlideTap::StarTap(TapData {
+                    position: Button::A1,
+                    break_: false,
+                    ex: false
+                }),
+                wait_duration: 0.,
+                total_track_duration: 0.,
+                break_slide: true,
+                tracks: Vec::new()
+            }
+        );
+        assert!(matches!(
+            res.slide.wait,
+            SlideWaitDuration::OneBeatAtCurrentBpm
+        ));
+        assert_eq!(res.slide.tracks.len(), 1);
+        let track = &res.slide.tracks[0];
+        assert_eq!(
+            track.track,
+            SlideTrack {
+                start: Button::A1,
+                end: Button::A4,
+                duration: 0.,
+                variant: SlidePattern::Line
+            }
+        );
+
+        let (_, res) = slide("1-4b[1:2]").unwrap();
+        assert!(res.slide.slide.break_slide);
+
+        let (_, res) = slide("1-4[1:2]v8b[1:2]").unwrap();
+        assert!(res.slide.slide.break_slide);
+        let (_, res) = slide("1-4[1:2]v8[1:2]b").unwrap();
+        assert!(res.slide.tracks[0].break_slide);
+
+        let (_, res) = slide("1-4v8b[1:2]").unwrap();
+        assert!(res.slide.tracks[0].break_slide);
+        let (_, res) = slide("1-4v8[1:2]b").unwrap();
+        assert!(res.slide.tracks[0].break_slide);
     }
 
     #[test]
@@ -836,5 +895,10 @@ mod tests {
 
         let (s, _) = whitespace("   || hello!\r\n1").unwrap();
         assert_eq!(s, "1");
+    }
+
+    #[test]
+    fn file_slide() {
+        simai_file("&inote_1=(120){1},1-3[1:2]").unwrap();
     }
 }

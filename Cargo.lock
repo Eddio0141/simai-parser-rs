@@ -39,6 +39,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nom_permutation"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bc970084781b339d2e1d1aa6458d27e5f18d480ca5a69c7135e3978b57e17c7"
+dependencies = [
+ "nom",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -63,6 +72,7 @@ dependencies = [
  "exn",
  "nom",
  "nom-language",
+ "nom_permutation",
  "strum",
  "strum_macros",
 ]
