@@ -571,7 +571,7 @@ pub fn simai_file<'a>(
     );
     let other_fields = pair(file_field_start(take_till1(|c| c == '=')), not_line_ending);
 
-    let (input, _) = whitespace(input)?;
+    let (input, _) = pair(opt(tag("\u{FEFF}")), whitespace).parse(input)?;
     context(
         "event parser",
         all_consuming(many0(terminated(
@@ -950,5 +950,16 @@ mod tests {
         assert!(matches!(events.next().unwrap().1, Event::Hold(_)));
         assert!(matches!(events.next().unwrap().1, Event::Tap(_)));
         assert!(matches!(events.next().unwrap().1, Event::TapEach(_)));
+    }
+
+    #[test]
+    fn file_feff_start() {
+        let (_, fields) = simai_file("\u{FEFF}&inote_1=(120){1},E").unwrap();
+        assert_eq!(fields.len(), 1);
+        let mut field = fields.into_iter();
+        let Field::INote((_, events)) = field.next().unwrap() else {
+            panic!();
+        };
+        assert_eq!(events.count(), 3);
     }
 }
