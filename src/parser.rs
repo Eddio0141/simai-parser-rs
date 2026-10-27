@@ -293,15 +293,9 @@ enum SlideTapRaw {
 }
 
 #[derive(Clone)]
-pub struct TapEachData {
-    pub psuedo_each: bool,
-    pub position: Button,
-}
-
-#[derive(Clone)]
 pub enum Event {
     Tap(Tap),
-    TapEach((Tap, Vec<TapEachData>)),
+    TapEach((Tap, Vec<Button>)),
     Hold((Hold, Option<EventDuration>)),
     Slide(SlideEvent),
     Touch(Touch),
@@ -403,11 +397,9 @@ fn tap(input: &str) -> IResult<&str, Tap> {
     ))
 }
 
-fn tap_each(input: &str) -> IResult<&str, (Tap, Vec<TapEachData>)> {
-    let pseudo_each = opt(char('`')).map(|v| v.is_some());
-
-    // tap_each has no breaks
-    let (s, (button, taps)) = (button, many1((pseudo_each, button))).parse(input)?;
+fn tap_each(input: &str) -> IResult<&str, (Tap, Vec<Button>)> {
+    // tap_each has no breaks or ex
+    let (s, (button, taps)) = (button, many1(button)).parse(input)?;
 
     Ok((
         s,
@@ -420,12 +412,7 @@ fn tap_each(input: &str) -> IResult<&str, (Tap, Vec<TapEachData>)> {
                 },
                 star_shaped: None,
             },
-            taps.into_iter()
-                .map(|(psuedo_each, position)| TapEachData {
-                    position,
-                    psuedo_each,
-                })
-                .collect::<Vec<_>>(),
+            taps,
         ),
     ))
 }
@@ -467,7 +454,15 @@ fn whitespace(input: &str) -> IResult<&str, ()> {
     Ok((s, ()))
 }
 
-fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
+#[derive(Clone)]
+pub enum Each {
+    Normal,
+    Psuedo,
+}
+
+pub type SimaiEvent = (Each, Event);
+
+fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = SimaiEvent>)> {
     let inote = file_field_start(preceded(tag("inote_"), u64));
 
     let sep = || char(',');
@@ -513,12 +508,19 @@ fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
 
     let (input, _) = whitespace(input)?;
 
+    let each = || {
+        alt((
+            value(Each::Normal, char('/')),
+            value(Each::Psuedo, char('`')),
+        ))
+    };
+
     let (input, (inote, initial_events, _, (events, _))) = (
         inote,
         cut(start_of_map),
         whitespace,
         many_till(
-            pair(event(), many0(preceded(char('/'), event()))),
+            pair(event(), many0(pair(each(), event()))),
             // Check for sensor as end char can match the sensor name E?
             pair(not(sensor), end),
         ),
@@ -529,16 +531,16 @@ fn simai_map(input: &str) -> IResult<&str, (u64, impl Iterator<Item = Event>)> {
 
     let initial_events = [e1, e2];
 
-    let events = initial_events.into_iter().chain(
+    let events = initial_events.into_iter().map(|v| (Each::Normal, v)).chain(
         events
             .into_iter()
-            .flat_map(|(e1, e2)| [e1].into_iter().chain(e2)),
+            .flat_map(|(e1, e2)| [(Each::Normal, e1)].into_iter().chain(e2)),
     );
 
     Ok((input, (inote, events)))
 }
 
-pub enum Field<'a, I: Iterator<Item = Event>> {
+pub enum Field<'a, I: Iterator<Item = SimaiEvent>> {
     Title(&'a str),
     Artist(&'a str),
     First(f64),
@@ -551,7 +553,7 @@ pub enum Field<'a, I: Iterator<Item = Event>> {
 
 pub fn simai_file<'a>(
     input: &'a str,
-) -> IResult<&'a str, Vec<Field<'a, impl Iterator<Item = Event>>>, VerboseError<&'a str>> {
+) -> IResult<&'a str, Vec<Field<'a, impl Iterator<Item = SimaiEvent>>>, VerboseError<&'a str>> {
     let title = file_field_line(tag("title"));
     let artist = file_field_line(tag("artist"));
     let first = map_parser(file_field_line(tag("first")), double);
@@ -667,6 +669,25 @@ mod tests {
         let (s, fields) = simai_file("").unwrap();
         assert!(s.is_empty());
         assert!(fields.is_empty());
+    }
+
+    #[test]
+    fn tap_each_test() {
+        let (s, res) = tap_each("135").unwrap();
+        assert!(s.is_empty());
+        let (first, second) = res;
+        assert_eq!(
+            first,
+            Tap {
+                data: TapData {
+                    position: Button::A1,
+                    break_: false,
+                    ex: false
+                },
+                star_shaped: None
+            }
+        );
+        assert_eq!(second, vec![Button::A3, Button::A5]);
     }
 
     #[test]
@@ -900,5 +921,34 @@ mod tests {
     #[test]
     fn file_slide() {
         simai_file("&inote_1=(120){1},1-3[1:2]").unwrap();
+    }
+
+    #[test]
+    fn file_each() {
+        let (_, (_, events)) = simai_map("&inote_1=(120){1},135").unwrap();
+        // BPM, Div, Separator
+        let mut events = events.skip(3);
+        let Event::TapEach((tap, each)) = events.next().unwrap().1 else {
+            panic!();
+        };
+        assert_eq!(
+            tap,
+            Tap {
+                data: TapData {
+                    position: Button::A1,
+                    break_: false,
+                    ex: false
+                },
+                star_shaped: None
+            }
+        );
+        assert_eq!(each, vec![Button::A3, Button::A5]);
+
+        let (_, (_, events)) = simai_map("&inote_1=(120){1},1h3b56").unwrap();
+        // BPM, Div, Separator
+        let mut events = events.skip(3);
+        assert!(matches!(events.next().unwrap().1, Event::Hold(_)));
+        assert!(matches!(events.next().unwrap().1, Event::Tap(_)));
+        assert!(matches!(events.next().unwrap().1, Event::TapEach(_)));
     }
 }

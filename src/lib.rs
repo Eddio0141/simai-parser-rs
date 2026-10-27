@@ -121,40 +121,46 @@ pub struct Map {
 }
 
 impl Map {
-    fn parse_map_events(first: Option<f64>, events: impl Iterator<Item = parser::Event>) -> Self {
+    fn parse_map_events(
+        first: Option<f64>,
+        events: impl Iterator<Item = parser::SimaiEvent>,
+    ) -> Self {
         let mut time = first.unwrap_or_default();
+        let mut psuedo_time_each = 0.;
         let mut bpm = 1.;
         let mut divider = 1.;
         let mut sep_secs = 1.;
 
         let mut res = Vec::new();
 
-        for event in events {
+        for (each, event) in events {
+            psuedo_time_each = match each {
+                parser::Each::Normal => 0.,
+                parser::Each::Psuedo => psuedo_time_each + 1.,
+            };
+
+            let use_time = psuedo_time_each + time;
+
             match event {
                 parser::Event::Tap(tap) => {
                     res.push(Event {
-                        time,
+                        time: use_time,
                         event_type: EventType::Tap(tap),
                     });
                 }
                 parser::Event::TapEach((tap, taps)) => {
                     res.push(Event {
-                        time,
+                        time: use_time,
                         event_type: EventType::Tap(tap),
                     });
 
                     // Handle rest of taps
-                    let mut psuedo_time = time;
-                    for tap in taps {
-                        if tap.psuedo_each {
-                            psuedo_time += 0.001;
-                        }
-
+                    for position in taps {
                         res.push(Event {
-                            time: psuedo_time,
+                            time: use_time,
                             event_type: EventType::Tap(Tap {
                                 data: TapData {
-                                    position: tap.position,
+                                    position,
                                     break_: false,
                                     ex: false,
                                 },
@@ -166,29 +172,29 @@ impl Map {
                 parser::Event::Hold((mut hold, duration)) => {
                     hold.duration = Self::parse_event_duration(duration, bpm);
                     res.push(Event {
-                        time,
+                        time: use_time,
                         event_type: EventType::Hold(hold),
                     });
                 }
                 parser::Event::Slide(slide_event) => {
                     let SlideEvent { slide, multi } = slide_event;
 
-                    Self::parse_slide(slide, time, bpm, &mut res);
+                    Self::parse_slide(slide, use_time, bpm, &mut res);
 
                     for slide in multi {
-                        Self::parse_slide(slide, time, bpm, &mut res);
+                        Self::parse_slide(slide, use_time, bpm, &mut res);
                     }
                 }
                 parser::Event::Touch(touch) => {
                     res.push(Event {
-                        time,
+                        time: use_time,
                         event_type: EventType::Touch(touch),
                     });
                 }
                 parser::Event::TouchHold((mut hold, duration)) => {
                     hold.duration = Self::parse_event_duration(duration, bpm);
                     res.push(Event {
-                        time,
+                        time: use_time,
                         event_type: EventType::TouchHold(hold),
                     });
                 }
