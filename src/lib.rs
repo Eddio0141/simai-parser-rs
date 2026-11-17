@@ -290,7 +290,7 @@ pub enum Button {
     A8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display, FromRepr)]
 /// Touch sensor on the screen
 pub enum Sensor {
     A1,
