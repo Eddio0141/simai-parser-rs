@@ -29,9 +29,7 @@ fn main() {
         let SimaiFile {
             title,
             artist,
-            designers,
             first,
-            level_names,
             wholebpm,
             other_fields,
             maps,
@@ -39,20 +37,21 @@ fn main() {
 
         println!("title: {title:?}");
         println!("artist: {artist:?}");
-        println!("designers: {designers:?}");
         println!("first: {first:?}");
         println!("wholebpm: {wholebpm:?}");
         println!("other_fields: {other_fields:?}");
         println!();
 
-        for (id, map) in maps {
-            println!(
-                "map id {id}, name: {}",
-                level_names.get(&id).unwrap_or(&"UNKNOWN")
-            );
-            println!("-----");
+        for map in maps {
+            let Map {
+                events,
+                name,
+                designer,
+                id,
+            } = map;
 
-            let Map { events } = map;
+            println!("map id {id}, name: {name:?}, designer: {designer:?}",);
+            println!("-----");
 
             let mut prev_time = f64::NAN;
 

@@ -21,18 +21,14 @@ pub struct SimaiFile<'a> {
     pub title: Option<&'a str>,
     /// Music artist
     pub artist: Option<&'a str>,
-    /// Map designers
-    pub designers: HashMap<u64, &'a str>,
     /// Offset to first note
     pub first: f64,
-    /// Names of the levels, where the key is the level number
-    pub level_names: HashMap<u64, &'a str>,
     /// Display BPM of the map. Doesn't actually do anything in the map
     pub wholebpm: Option<f64>,
     /// Other unknown fields
     pub other_fields: HashMap<&'a str, &'a str>,
     /// All maps, where the key is the level number
-    pub maps: HashMap<u64, Map>,
+    pub maps: Vec<Map<'a>>,
 }
 
 impl<'a> SimaiFile<'a> {
@@ -48,7 +44,7 @@ impl<'a> SimaiFile<'a> {
         let mut designers = HashMap::new();
         let mut level_names = HashMap::new();
         let mut other_fields = HashMap::new();
-        let mut maps = HashMap::new();
+        let mut maps = Vec::new();
 
         for field in fields {
             match field {
@@ -71,26 +67,28 @@ impl<'a> SimaiFile<'a> {
                     );
                     wholebpm = Some(value)
                 }
-                Field::Designer((num, value)) => {
+                Field::Designer((id, value)) => {
                     ensure!(
-                        !designers.contains_key(&num),
-                        SimaiParseError::DuplicateFieldEntry(num, "des")
+                        !designers.contains_key(&id),
+                        SimaiParseError::DuplicateFieldEntry(id, "des")
                     );
-                    designers.insert(num, value);
+                    designers.insert(id, value);
                 }
-                Field::Level((num, value)) => {
+                Field::Level((id, value)) => {
                     ensure!(
-                        !level_names.contains_key(&num),
-                        SimaiParseError::DuplicateFieldEntry(num, "lv")
+                        !level_names.contains_key(&id),
+                        SimaiParseError::DuplicateFieldEntry(id, "lv")
                     );
-                    level_names.insert(num, value);
+                    level_names.insert(id, value);
                 }
-                Field::INote((num, events)) => {
-                    ensure!(
-                        !maps.contains_key(&num),
-                        SimaiParseError::DuplicateFieldEntry(num, "inote")
-                    );
-                    maps.insert(num, Map::parse_map_events(first, events));
+                Field::INote((id, events)) => {
+                    maps.push(Map::parse_map_events(
+                        first,
+                        events,
+                        id,
+                        level_names.remove(&id),
+                        designers.remove(&id),
+                    ));
                 }
                 Field::OtherFields((name, value)) => {
                     other_fields.insert(name, value);
@@ -98,12 +96,30 @@ impl<'a> SimaiFile<'a> {
             }
         }
 
+        // Handle remaining unused level names and designers
+        for (id, name) in level_names {
+            let designer = designers.remove(&id);
+            maps.push(Map {
+                name: Some(name),
+                designer,
+                id,
+                events: Vec::new(),
+            });
+        }
+
+        for (id, designer) in designers {
+            maps.push(Map {
+                name: None,
+                designer: Some(designer),
+                id,
+                events: Vec::new(),
+            });
+        }
+
         Ok(SimaiFile {
             title,
             artist,
-            designers,
             first: first.unwrap_or_default(),
-            level_names,
             wholebpm,
             other_fields,
             maps,
@@ -112,18 +128,34 @@ impl<'a> SimaiFile<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Designer<'a> {
+    /// Internal Simai ID of designer
+    pub id: u64,
+    pub name: &'a str,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 /// Represents a single map
-pub struct Map {
+pub struct Map<'a> {
+    /// Name of the map
+    pub name: Option<&'a str>,
+    /// Designer of the map
+    pub designer: Option<&'a str>,
+    /// Internal Simai ID of map
+    pub id: u64,
     /// Map events, ordered by time
     ///
     /// Some events happens at the same time, in which case is ordered by whichever appears first in the file
     pub events: Vec<Event>,
 }
 
-impl Map {
+impl<'a> Map<'a> {
     fn parse_map_events(
         first: Option<f64>,
         events: impl Iterator<Item = parser::SimaiEvent>,
+        id: u64,
+        name: Option<&'a str>,
+        designer: Option<&'a str>,
     ) -> Self {
         let mut time = first.unwrap_or_default();
         let mut psuedo_time_each = 0.;
@@ -211,7 +243,12 @@ impl Map {
             }
         }
 
-        Map { events: res }
+        Map {
+            events: res,
+            name,
+            designer,
+            id,
+        }
     }
 
     fn parse_event_duration(duration: Option<EventDuration>, bpm: f64) -> f64 {
