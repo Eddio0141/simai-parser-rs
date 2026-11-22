@@ -127,7 +127,7 @@ impl<'a> SimaiFile<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct Designer<'a> {
     /// Internal Simai ID of designer
     pub id: u64,
@@ -314,7 +314,7 @@ pub enum EventType {
     TouchHold(TouchHold),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromRepr, Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, FromRepr, Display)]
 /// Button, separate from sensor
 pub enum Button {
     A1 = 1,
@@ -327,7 +327,7 @@ pub enum Button {
     A8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display, FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, Display, FromRepr)]
 /// Touch sensor on the screen
 pub enum Sensor {
     A1,
@@ -366,7 +366,7 @@ pub enum Sensor {
     E8,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Data for a tap
 pub struct TapData {
     /// Note position
@@ -377,7 +377,7 @@ pub struct TapData {
     pub ex: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Tap note
 pub struct Tap {
     /// Data of this tap
@@ -386,7 +386,7 @@ pub struct Tap {
     pub star_shaped: Option<StarShapedTap>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum StarShapedTap {
     /// Star shaped but not rotating
     NonRotating,
@@ -421,7 +421,7 @@ pub struct Slide {
     pub tracks: Vec<SlideTrack>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Possible taps for a slide
 pub enum SlideTap {
     /// The default star-shaped tap
@@ -447,7 +447,7 @@ pub struct SlideTrack {
     pub variant: SlidePattern,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(non_camel_case_types)]
 /// Slide pattern
 ///
@@ -481,7 +481,7 @@ pub enum SlidePattern {
     Fan,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display)]
 /// Position of the touch note
 pub enum TouchPosition {
     /// Note appears at the sensor
@@ -492,7 +492,7 @@ pub enum TouchPosition {
     Center,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Touch note
 pub struct Touch {
     /// Note position
