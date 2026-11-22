@@ -2,7 +2,7 @@ use exn::{Result, ensure};
 use nom::Finish;
 use nom_language::error::convert_error;
 use std::collections::HashMap;
-use strum_macros::{Display, EnumString, FromRepr};
+use strum_macros::{Display, EnumCount, EnumIter, EnumString, FromRepr};
 
 pub mod errors;
 mod parser;
@@ -314,7 +314,7 @@ pub enum EventType {
     TouchHold(TouchHold),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, FromRepr, Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, FromRepr, Display, EnumCount, EnumIter)]
 /// Button, separate from sensor
 pub enum Button {
     A1 = 1,
@@ -327,7 +327,9 @@ pub enum Button {
     A8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, Display, FromRepr)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, Display, FromRepr, EnumCount, EnumIter,
+)]
 /// Touch sensor on the screen
 pub enum Sensor {
     A1,
