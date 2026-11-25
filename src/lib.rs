@@ -368,6 +368,12 @@ pub enum Sensor {
     E8,
 }
 
+impl From<Button> for Sensor {
+    fn from(value: Button) -> Self {
+        Sensor::from_repr(value as usize).unwrap()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Data for a tap
 pub struct TapData {
