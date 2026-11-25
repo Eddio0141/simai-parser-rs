@@ -317,7 +317,7 @@ pub enum EventType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, FromRepr, Display, EnumCount, EnumIter)]
 /// Button, separate from sensor
 pub enum Button {
-    A1 = 1,
+    A1,
     A2,
     A3,
     A4,
